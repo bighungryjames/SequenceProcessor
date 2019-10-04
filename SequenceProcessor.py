@@ -9,6 +9,8 @@
 # The code pattern is now much more object-oriented, e.g. reverse_complement(). Bottlenecks in fasta_reader() and fasta_writer() are now removed.
 # Version 2.4:
 # More optimization on translate() function.
+# Version 2.5: added AAConvertTable, reverted back to deque for optimization. fasta_writer() was updated as well.
+from collections import deque
 
 DNAset = set(['A', 'T', 'G', 'C'])
 DNAXset = set(['A', 'T', 'G', 'C', 'R', 'Y', 'S', 'W', 'K', 'M', 'B', 'D', 'H', 'V', 'N'])
@@ -48,6 +50,12 @@ basePairingTable = {\
     'S':'S', 'W':'W',\
     'B':'V', 'V':'B', 'D':'H', 'H':'D',\
     'N':'N'}
+
+AAConvertTable = {\
+    'GLY':'G', 'ALA':'A', 'VAL':'V', 'LEU':'L', 'ILE':'I', 'MET':'M',\
+    'PRO':'P', 'TRP':'W', 'PHE':'F', 'SER':'S', 'THR':'T', 'CYS':'C',\
+    'TYR':'Y', 'ASN':'N', 'GLN':'Q', 'ASP':'D', 'GLU':'E', 'LYS':'K',\
+    'ARG':'R', 'HIS':'H'}
 
 
 
@@ -145,20 +153,12 @@ def fasta_writer(input_list, length=50, numbered=False, vertically_spaced=True):
         n = m*length
         for i in range(m + 1):
             if numberwriting:
-                if n >= 1000000 and i*length / 1000000 < 1: #trust python's compiler. but ordering might help.
-                    f.write(' ')                    
-                if n >= 100000 and i*length / 100000 < 1:
-                    f.write(' ')                   
-                if n >= 10000 and i*length / 10000 < 1:
-                    f.write(' ')                
-                if n >= 1000 and i*length / 1000 < 1:
-                    f.write(' ')
-                if n >= 100 and i*length / 100 < 1:
-                    f.write(' ')
-                if n >= 10 and i*length / 10 < 1:
-                    f.write(' ')
+                while num_spaces <= 10:
+                    order = 10 ** num_spaces
+                    if n >= order and i*length // order < 1:
+                        f.write(' ')
                 f.write(str(i*length + 1))
-                f.write(' ')            
+                f.write(' ')
             f.write(item[1][i*length:(i+1)*length] + '\n')
         if vertically_spaced:
             f.write('\n')
@@ -186,7 +186,7 @@ dic_T_to_U = { 'T':'U' }
 
 
 def sequence_processor(seq, comset_name, replacer_function=identity_function, not_reverse=True):
-    out = []
+    out = deque()
     comset = mode_set(comset_name)
     if not_reverse:
         for char in seq:
@@ -197,7 +197,7 @@ def sequence_processor(seq, comset_name, replacer_function=identity_function, no
     else:
         for char in seq:
             if char in comset:
-                out.insert(0, replacer_function(char))
+                out.extendleft(replacer_function(char))
             else:
                 print('Error: character \"'+char+'\" in seq in function trascript(seq) is not '+comset_name+' type.')        
     return ''.join(out)
