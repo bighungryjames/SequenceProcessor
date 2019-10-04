@@ -7,7 +7,8 @@
 # Stop codon now follows the IUPAC notation: '*', not '-'.
 # Version 2.3:
 # The code pattern is now much more object-oriented, e.g. reverse_complement(). Bottlenecks in fasta_reader() and fasta_writer() are now removed.
-import collections
+# Version 2.4:
+# More optimization on translate() function.
 
 DNAset = set(['A', 'T', 'G', 'C'])
 DNAXset = set(['A', 'T', 'G', 'C', 'R', 'Y', 'S', 'W', 'K', 'M', 'B', 'D', 'H', 'V', 'N'])
@@ -80,11 +81,11 @@ def mode_set(mode):
 
 
 def fasta_reader(mode, fasta_name='./input.txt'): 
-    """
-    reads a fasta file. yield list of tuples of strings [(header, sequence),*].
-    mode == "DNA" or "DNAX"(DNA with degenerate codes) or "RNA" or "RNAX" or "AA"(protein) or "AAX".
-    default of mode is AAX.
-    """
+    
+    #reads a fasta file. yield list of tuples of strings [(header, sequence),*].
+    #mode == "DNA" or "DNAX"(DNA with degenerate codes) or "RNA" or "RNAX" or "AA"(protein) or "AAX".
+    #default of mode is AAX.
+    
     f = open(fasta_name,'r')
 
     comset = mode_set(mode)
@@ -124,14 +125,14 @@ def fasta_reader(mode, fasta_name='./input.txt'):
 
 
 
-def fasta_writer(input_list, length=100, numbered=True, vertically_spaced=True):
-    """
-    given a list of tuples of strings in form [(header, sequence),*], yields fasta-formatted .txt file.
-    line length is given, or can be 100 to be default.
-    numbered = True writes numbers in the front only if len(seq) > length.
-    numbered = False does not write the numbers in the front.
-    vertically_spaced = True writes an additional '\n' between each fasta elements.
-    """
+def fasta_writer(input_list, length=50, numbered=False, vertically_spaced=True):
+    
+    #given a list of tuples of strings in form [(header, sequence),*], yields fasta-formatted .txt file.
+    #line length is given, or can be 100 to be default.
+    #numbered = True writes numbers in the front only if len(seq) > length.
+    #numbered = False does not write the numbers in the front.
+    #vertically_spaced = True writes an additional '\n' between each fasta elements.
+    
     f = open("./output.txt", 'w')
     length = int(length) #a failsafe
     for item in input_list:
@@ -185,7 +186,7 @@ dic_T_to_U = { 'T':'U' }
 
 
 def sequence_processor(seq, comset_name, replacer_function=identity_function, not_reverse=True):
-    out = collections.deque() #use deque to support extendleft().
+    out = []
     comset = mode_set(comset_name)
     if not_reverse:
         for char in seq:
@@ -196,7 +197,7 @@ def sequence_processor(seq, comset_name, replacer_function=identity_function, no
     else:
         for char in seq:
             if char in comset:
-                out.extendleft(replacer_function(char))
+                out.insert(0, replacer_function(char))
             else:
                 print('Error: character \"'+char+'\" in seq in function trascript(seq) is not '+comset_name+' type.')        
     return ''.join(out)
@@ -222,18 +223,19 @@ def translate(data): #Only supports DNA and RNA format. receives list of tuples 
     for item in data:
         for readingframe in [0,1,2]:
             temp_translate_list = []
-            codon = ''#since max length of codons is only 3, little need to use list.
+            codon_list = []
             for i in range(len(item[1])-readingframe):
                 if item[1][i+readingframe] == 'U':
-                    codon = codon + 'T'
+                    codon_list.append('T')
                 else:
-                    codon = codon + item[1][i+readingframe]
-                if len(codon) == 3:
+                    codon_list.append(item[1][i+readingframe])
+                if len(codon_list) == 3:
+                    codon = ''.join(codon_list)
                     try:
                         temp_translate_list.append(codonTable[codon])
                     except KeyError:
                         print('Error: Non-DNA character in the input in function translate(data).')
-                    codon = ''
+                    codon_list.clear()
             temp_translate = ''.join(temp_translate_list)
             out.append((item[0] + '_' + str(readingframe) , temp_translate))
     return out
@@ -276,35 +278,6 @@ def point_mutator(data, mutlist): #Incomplete.
 
 
 
-def codon_statistics(): #Incomplete. 
-    reader("DNA")
-    codons = {}
-    for i in codonTable.keys():
-        codons[i] = 0
-    memory = open("./memory.txt","r")
-    result = open("./result.csv","w")
-    result.write('\"Amino Acid\",\"Codons\",\"Value\"\n')
-    line = memory.readline().strip()
-    i = 0
-    totalAA = 0
-    while(i < len(line)-3):
-        frame = line[i] + line[i+1] + line[i+2]
-        codons[frame] += 1
-        totalAA += 1
-        i += 3
-    codonList = inverse_dictionary(codonTable)
-    for AA in AAset:
-        result.write('\"' + AA + '\",')
-        for i in range(len(codonList[AA])):
-            if not i == 0:
-                result.write(',')
-            result.write('\"' + codonList[AA][i] + '\",'+ str(codons[codonList[AA][i]]) + '\n')
-    result.write('\"Total\",,' + str(totalAA))
-    result.close()
-    return
-
-
-
 def _main():
     _console()
     input('Press any key to exit.')
@@ -322,7 +295,7 @@ def _console():
     elif inputstr == 'cleaning':
         print('Processing data...')
         data = fasta_reader('AA')
-        fasta_writer(data,100,False)
+        fasta_writer(data,50,False)
         print('Task finished.\n')
 
     elif inputstr == 'reverse':
@@ -340,7 +313,7 @@ def _console():
         processed = []
         for item in data:
             processed.append((item[0], reverse_complement(item[1])))
-        fasta_writer(processed)
+        fasta_writer(processed,100,False)
         print('Task finished.')
 
     elif inputstr == 'transcript':
